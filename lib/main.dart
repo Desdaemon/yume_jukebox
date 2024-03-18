@@ -1,11 +1,22 @@
-import 'dart:ui';
+import 'dart:convert';
+import 'dart:math';
 
+import 'package:atom/atom.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
-import 'package:gap/gap.dart';
-import 'package:text_scroll/text_scroll.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:yume_jukebox/with_atom.dart';
+
+import 'play_screen.dart';
+
+final colorScheme = atom((
+  ColorScheme.fromSeed(seedColor: Colors.cyan),
+  ColorScheme.fromSeed(seedColor: Colors.cyan, brightness: Brightness.dark),
+));
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  Track.updateTrackList();
   runApp(const MyApp());
 }
 
@@ -14,281 +25,80 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData.dark(useMaterial3: true),
-      debugShowCheckedModeBanner: false,
-      home: const MyHomePage(title: 'Yume 2kki Jukebox'),
-    );
+    return AtomBuilder(atom: colorScheme, (context, scheme) {
+      final (lightScheme, darkScheme) = scheme;
+      return MaterialApp(
+        title: 'Flutter Demo',
+        theme: ThemeData(colorScheme: lightScheme),
+        darkTheme: ThemeData(colorScheme: darkScheme),
+        debugShowCheckedModeBanner: false,
+        home: const TrackListingScreen(),
+      );
+    });
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
+class TrackListingScreen extends StatefulWidget {
+  const TrackListingScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<StatefulWidget> createState() => _TrackListingScreen();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  bool hasVariants = false;
-
+class _TrackListingScreen extends State<StatefulWidget> with AtomHelpers {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(children: [
-        SizedBox.expand(
-          child: Image.asset(
-            'images/bg.png',
-            fit: BoxFit.cover,
-            colorBlendMode: BlendMode.srcOver,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withAlpha(0x44)
-                : null,
-          ),
+    return AtomBuilder(atom: Track.repo, (context, value) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Yume 2kki Jukebox')),
+        body: ListView.builder(
+          itemCount: value.length,
+          itemBuilder: (context, idx) {
+            final item = value[idx];
+            return ListTile(
+              title: Text(item.name),
+              onTap: () {
+                Track.currentTrackIndex.set(idx);
+                Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PlayScreen()));
+              },
+            );
+          },
         ),
-        Positioned(
-          bottom: 24,
-          left: 18,
-          width: 320,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-              child: _playerControls,
-            ),
-          ),
-        ) // Positioned
-      ]),
-    );
-  }
-
-  Widget get _playerControls {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      color: Theme.of(context).colorScheme.background.withAlpha(0xDA),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextScroll(
-            "123A・kappa_01_2",
-            style: Theme.of(context).textTheme.headlineMedium,
-            delayBefore: const Duration(seconds: 2),
-            pauseBetween: const Duration(seconds: 2),
-          ),
-          const Gap(8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.max,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton.outlined(
-                  onPressed: () {},
-                  icon: const Icon(Icons.bedtime),
-                  visualDensity: VisualDensity.compact,
-                ),
-                const Gap(8),
-                IconButton.outlined(
-                  onPressed: () {},
-                  icon: const Icon(Icons.playlist_add),
-                  visualDensity: VisualDensity.compact,
-                ),
-                const Gap(8),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 500),
-                  child: !hasVariants
-                      ? const SizedBox.shrink()
-                      : SegmentedButton(
-                          selected: const {'A'},
-                          segments: [
-                            const ButtonSegment(
-                              value: 'A',
-                              label: Text('A'),
-                              enabled: true,
-                            ),
-                            for (final letter in 'BCDEFG'.characters)
-                              ButtonSegment(value: letter, label: Text(letter))
-                          ],
-                          onSelectionChanged: (selection) {
-                            debugPrint('$selection');
-                          },
-                        ),
-                )
-              ],
-            ),
-          ),
-          const Gap(16),
-          Row(
-            mainAxisSize: MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              StatefulButton(
-                selected: AutoplayMode.repeat,
-                iconSize: 32,
-                stateChanged: (mode) => mode.nextState,
-              ),
-              const Gap(6),
-              Tooltip(
-                message: 'Previous',
-                child: IconButton.outlined(
-                  onPressed: () {},
-                  icon: const Icon(Icons.skip_previous),
-                  iconSize: 32,
-                ),
-              ),
-              const Gap(6),
-              IconButton.filled(
-                onPressed: () {
-                  setState(() {
-                    hasVariants = !hasVariants;
-                  });
-                },
-                icon: const Icon(Icons.pause),
-                iconSize: 48,
-              ),
-              const Gap(6),
-              IconButton.outlined(
-                onPressed: () {},
-                icon: const Icon(Icons.skip_next),
-                iconSize: 32,
-              ),
-              const Gap(6),
-              StatefulButton(
-                selected: ShuffleMode.sequential,
-                iconSize: 32,
-                stateChanged: (mode) => mode.nextState,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+      );
+    });
   }
 }
 
-enum IconButtons {
-  normal,
-  filled,
-  filledTonal,
-  outlined,
-}
+class Track {
+  const Track({required this.assetPath});
+  final String assetPath;
 
-abstract interface class ButtonState<Self extends ButtonState<Self>> {
-  ({IconData icon, IconButtons style, String tooltip}) get state;
-}
+  static final repo = atom(<Track>[]);
+  static final currentTrackIndex = atom(0);
+  static setNextTrack({int? delta, bool shuffle = false}) {
+    if (shuffle) {
+      currentTrackIndex.set(Random().nextInt(repo().length));
+      return;
+    }
 
-enum AutoplayMode implements ButtonState<AutoplayMode> {
-  repeat,
-  autoplay;
-
-  @override
-  get state => switch (this) {
-        repeat => const (
-            icon: Icons.repeat_one,
-            style: IconButtons.outlined,
-            tooltip: 'Repeat',
-          ),
-        autoplay => const (
-            icon: Icons.fast_forward,
-            style: IconButtons.filledTonal,
-            tooltip: 'Autoplay',
-          ),
-      };
-
-  AutoplayMode get nextState => switch (this) {
-        repeat => autoplay,
-        autoplay => repeat,
-      };
-}
-
-enum ShuffleMode implements ButtonState<ShuffleMode> {
-  sequential,
-  shuffle;
-
-  @override
-  get state => switch (this) {
-        sequential => const (
-            icon: Icons.arrow_forward,
-            style: IconButtons.outlined,
-            tooltip: 'Sequential',
-          ),
-        shuffle => const (
-            icon: Icons.shuffle,
-            style: IconButtons.filledTonal,
-            tooltip: 'Shuffle',
-          ),
-      };
-
-  ShuffleMode get nextState => switch (this) {
-        sequential => shuffle,
-        shuffle => sequential,
-      };
-}
-
-class StatefulButton<T extends ButtonState<T>> extends StatefulWidget {
-  const StatefulButton({
-    super.key,
-    required this.selected,
-    T Function(T)? stateChanged,
-    this.iconSize,
-  }) : onPressed = stateChanged ?? _identity;
-
-  final T selected;
-  final T Function(T) onPressed;
-  final double? iconSize;
-
-  @protected
-  T erasedOnPressed(covariant T value) {
-    return onPressed(value);
+    if (delta != null) {
+      currentTrackIndex.set((currentTrackIndex() + delta) % repo().length);
+    }
   }
 
-  static T _identity<T>(T value) => value;
+  String get name => p.basenameWithoutExtension(assetPath);
 
-  @override
-  State<StatefulButton> createState() => _StatefulButtonState<T>();
-}
-
-class _StatefulButtonState<T extends ButtonState<T>>
-    extends State<StatefulButton> {
-  late T userState;
-
-  @override
-  void initState() {
-    super.initState();
-    userState = widget.selected as T;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final builder = switch (userState.state.style) {
-      IconButtons.normal => IconButton.new,
-      IconButtons.filled => IconButton.filled,
-      IconButtons.filledTonal => IconButton.filledTonal,
-      IconButtons.outlined => IconButton.outlined,
-    };
-
-    return builder(
-      onPressed: _onPressed,
-      icon: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 150),
-        child: Icon(userState.state.icon, key: ValueKey(userState)),
-        transitionBuilder: (widget, lerp) =>
-            ScaleTransition(scale: lerp, child: widget),
-      ),
-      tooltip: userState.state.tooltip,
-      iconSize: widget.iconSize,
-    );
-  }
-
-  void _onPressed() {
-    final newState = widget.erasedOnPressed(userState) as T;
-    setState(() => userState = newState);
+  static Future<void> updateTrackList() async {
+    final manifest = await rootBundle.loadString('music/manifest.json');
+    final trackManifest =
+        (jsonDecode(manifest) as List).cast<Map<String, dynamic>>();
+    Track.repo.mutate((tracks) {
+      for (final {'name': String name} in trackManifest) {
+        if (p.extension(name).isNotEmpty) {
+          tracks.add(Track(assetPath: 'music/$name'));
+        }
+      }
+    });
   }
 }
