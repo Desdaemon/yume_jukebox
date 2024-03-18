@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 
@@ -71,18 +72,38 @@ class _TrackListingScreen extends State<StatefulWidget> with AtomHelpers {
 }
 
 class Track {
-  const Track({required this.assetPath});
+  const Track({
+    required this.assetPath,
+    this.gameEvent = '',
+    this.background = fallbackBackground,
+  });
+  static const fallbackBackground = 'images/bg.png';
+
   final String assetPath;
+  final String gameEvent;
+  final String background;
 
   static final repo = atom(<Track>[]);
   static final currentTrackIndex = atom(0);
-  static setNextTrack({int? delta, bool shuffle = false}) {
+  static final playHistory = Queue<int>();
+  static setNextTrack({
+    int? delta,
+    bool backInQueue = false,
+    bool shuffle = false,
+  }) {
     if (shuffle) {
+      playHistory.add(currentTrackIndex.value);
       currentTrackIndex.set(Random().nextInt(repo().length));
       return;
     }
 
+    if (backInQueue && playHistory.isNotEmpty) {
+      currentTrackIndex.set(playHistory.removeFirst());
+      return;
+    }
+
     if (delta != null) {
+      if (delta > 0) playHistory.add(currentTrackIndex.value);
       currentTrackIndex.set((currentTrackIndex() + delta) % repo().length);
     }
   }
@@ -94,9 +115,13 @@ class Track {
     final trackManifest =
         (jsonDecode(manifest) as List).cast<Map<String, dynamic>>();
     Track.repo.mutate((tracks) {
-      for (final {'name': String name} in trackManifest) {
-        if (p.extension(name).isNotEmpty) {
-          tracks.add(Track(assetPath: 'music/$name'));
+      for (final data in trackManifest) {
+        if (p.extension(data['name']).isNotEmpty) {
+          tracks.add(Track(
+            assetPath: 'music/${data['name']}',
+            gameEvent: data['event'] ?? '',
+            background: data['bg'] ?? fallbackBackground,
+          ));
         }
       }
     });

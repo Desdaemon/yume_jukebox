@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 // import 'package:yume_jukebox/main.dart';
 
@@ -9,23 +11,24 @@ enum IconButtons {
 }
 
 abstract interface class ButtonState<Self extends ButtonState<Self>> {
-  ({IconData icon, IconButtons style, String tooltip}) get state;
+  ({IconData icon, IconButtons style, String tooltip, bool selectedStyle})
+      get state;
 }
 
 class StatefulButton<T extends ButtonState<T>> extends StatefulWidget {
   const StatefulButton({
     super.key,
     required this.selected,
-    T Function(T)? stateChanged,
+    FutureOr<T> Function(T)? stateChanged,
     this.iconSize,
   }) : onPressed = stateChanged ?? _identity;
 
   final T selected;
-  final T Function(T) onPressed;
+  final FutureOr<T> Function(T) onPressed;
   final double? iconSize;
 
   @protected
-  T erasedOnPressed(covariant T value) {
+  FutureOr<T> erasedOnPressed(covariant T value) {
     return onPressed(value);
   }
 
@@ -63,12 +66,13 @@ class _StatefulButtonState<T extends ButtonState<T>>
             ScaleTransition(scale: lerp, child: widget),
       ),
       tooltip: userState.state.tooltip,
+      isSelected: userState.state.selectedStyle,
       iconSize: widget.iconSize,
     );
   }
 
-  void _onPressed() {
-    final newState = widget.erasedOnPressed(userState) as T;
-    setState(() => userState = newState);
+  void _onPressed() async {
+    final newState = await Future.value(widget.erasedOnPressed(userState));
+    setState(() => userState = newState as T);
   }
 }

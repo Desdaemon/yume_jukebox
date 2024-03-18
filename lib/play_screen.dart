@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:assets_audio_player/assets_audio_player.dart';
+import 'package:duration_picker/duration_picker.dart';
 import 'package:flutter/material.dart';
-
 import 'package:gap/gap.dart';
 import 'package:text_scroll/text_scroll.dart';
-import 'package:yume_jukebox/main.dart';
-import 'package:yume_jukebox/with_atom.dart';
 
+import 'main.dart';
+import 'with_atom.dart';
 import 'stateful_button.dart';
 
 class PlayScreen extends StatefulWidget {
@@ -26,6 +26,8 @@ class _PlayScreenState extends State<PlayScreen>
   late AssetsAudioPlayer player;
   late AnimationController controller;
   final subscriptions = <StreamSubscription>[];
+  Timer? sleepTimer;
+  Timer? autoplayTimer;
 
   @override
   void initState() {
@@ -39,14 +41,16 @@ class _PlayScreenState extends State<PlayScreen>
 
     final initialIndex = Track.currentTrackIndex();
     effect(() {
-      debugPrint('init');
       final tracks = Track.repo();
       final playlist = tracks.map((track) {
         return Audio(
           track.assetPath,
           metas: Metas(
             title: track.name,
-            artist: 'Unknown',
+            image: MetasImage(
+              path: track.background,
+              type: ImageType.asset,
+            ),
             album: 'Yume 2kki OST',
           ),
         );
@@ -68,26 +72,25 @@ class _PlayScreenState extends State<PlayScreen>
 
     effect(() {
       final index = Track.currentTrackIndex();
-      debugPrint('track changed to $index');
       setState(() {
         track = Track.repo()[index];
         _drivePlayPauseAnimation(isPlaying: true);
       });
+      Future.wait([
+        ColorScheme.fromImageProvider(
+          provider: AssetImage(track.background),
+        ),
+        ColorScheme.fromImageProvider(
+          provider: AssetImage(track.background),
+          brightness: Brightness.dark,
+        ),
+      ]).then((data) {
+        if (!mounted) return;
+        colorScheme.set((data[0], data[1]));
+      });
       if (!player.current.hasValue || player.current.value?.index != index) {
         player.playlistPlayAtIndex(index);
       }
-    });
-
-    Future.wait([
-      ColorScheme.fromImageProvider(
-        provider: const AssetImage('images/bg.png'),
-      ),
-      ColorScheme.fromImageProvider(
-        provider: const AssetImage('images/bg.png'),
-        brightness: Brightness.dark,
-      ),
-    ]).then((data) {
-      colorScheme.set((data[0], data[1]));
     });
   }
 
@@ -106,6 +109,8 @@ class _PlayScreenState extends State<PlayScreen>
     for (final subscription in subscriptions) {
       subscription.cancel();
     }
+    sleepTimer?.cancel();
+    autoplayTimer?.cancel();
     player.dispose();
   }
 
@@ -115,7 +120,8 @@ class _PlayScreenState extends State<PlayScreen>
       body: Stack(children: [
         SizedBox.expand(
           child: Image.asset(
-            'images/bg.png',
+            track.background,
+            key: ValueKey(track.background),
             fit: BoxFit.cover,
             colorBlendMode: BlendMode.srcOver,
             color: Theme.of(context).brightness == Brightness.dark
@@ -142,7 +148,7 @@ class _PlayScreenState extends State<PlayScreen>
   Widget get _playerControls {
     return Container(
       padding: const EdgeInsets.all(12),
-      color: Theme.of(context).colorScheme.background.withOpacity(.85),
+      color: Theme.of(context).colorScheme.background.withOpacity(.75),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -152,13 +158,14 @@ class _PlayScreenState extends State<PlayScreen>
             delayBefore: const Duration(seconds: 2),
             pauseBetween: const Duration(seconds: 2),
           ),
-          Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
-            const Icon(Icons.music_note),
-            Text(
-              'Blue Cactus Islands',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-          ]),
+          if (track.gameEvent.isNotEmpty)
+            Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+              const Icon(Icons.location_pin),
+              Text(
+                track.gameEvent,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ]),
           const Gap(8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -167,12 +174,15 @@ class _PlayScreenState extends State<PlayScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton.outlined(
+                  tooltip: 'Sleep timer',
                   icon: const Icon(Icons.bedtime),
+                  isSelected: sleepTimer != null,
                   visualDensity: VisualDensity.compact,
-                  onPressed: () {},
+                  onPressed: _handleSleep,
                 ),
                 const Gap(8),
                 IconButton.outlined(
+                  tooltip: 'Add to playlist',
                   icon: const Icon(Icons.playlist_add),
                   visualDensity: VisualDensity.compact,
                   onPressed: () {},
@@ -193,19 +203,22 @@ class _PlayScreenState extends State<PlayScreen>
               StatefulButton(
                 selected: AutoplayMode.repeat,
                 iconSize: 32,
-                stateChanged: (mode) => mode.nextState,
+                stateChanged: (mode) async {
+                  final result = await _handleAutoplay(
+                      wantAutoplay: mode.nextState == AutoplayMode.autoplay);
+                  return result ? AutoplayMode.autoplay : AutoplayMode.repeat;
+                },
               ),
               const Gap(6),
-              Tooltip(
-                message: 'Previous',
-                child: IconButton.outlined(
-                  onPressed: () {
-                    Track.setNextTrack(delta: -1, shuffle: player.shuffle);
-                    _drivePlayPauseAnimation(isPlaying: true);
-                  },
-                  icon: const Icon(Icons.skip_previous),
-                  iconSize: 32,
-                ),
+              IconButton.outlined(
+                tooltip: 'Previous',
+                onPressed: () {
+                  Track.setNextTrack(
+                      delta: -1, backInQueue: true, shuffle: false);
+                  _drivePlayPauseAnimation(isPlaying: true);
+                },
+                icon: const Icon(Icons.skip_previous),
+                iconSize: 32,
               ),
               const Gap(6),
               IconButton.filled(
@@ -215,6 +228,7 @@ class _PlayScreenState extends State<PlayScreen>
                 },
                 icon: AnimatedIcon(
                   icon: AnimatedIcons.play_pause,
+                  semanticLabel: isPlaying ? 'Pause' : 'Play',
                   progress: controller,
                 ),
                 iconSize: 48,
@@ -242,6 +256,52 @@ class _PlayScreenState extends State<PlayScreen>
         ],
       ),
     );
+  }
+
+  Future<bool> _handleAutoplay({bool wantAutoplay = true}) async {
+    if (autoplayTimer != null && !wantAutoplay) {
+      autoplayTimer!.cancel();
+      setState(() {
+        autoplayTimer = null;
+      });
+      return false;
+    }
+    if (!wantAutoplay) return false;
+    final delay = await showDurationPicker(
+      context: context,
+      initialTime: const Duration(minutes: 2),
+      baseUnit: BaseUnit.second,
+    );
+    if (!mounted || delay == null) return false;
+    setState(() {
+      autoplayTimer = Timer.periodic(delay, (_) {
+        if (!mounted) return;
+        Track.setNextTrack(delta: 1, shuffle: player.shuffle);
+      });
+    });
+    return true;
+  }
+
+  void _handleSleep() async {
+    if (sleepTimer != null) {
+      sleepTimer!.cancel();
+      setState(() {
+        sleepTimer = null;
+      });
+      return;
+    }
+
+    final delay = await showDurationPicker(
+      context: context,
+      initialTime: const Duration(minutes: 20),
+    );
+    if (!mounted || delay == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Sleeping in $delay'),
+    ));
+    setState(() {
+      sleepTimer = Timer(delay, player.stop);
+    });
   }
 
   Widget get _variantPicker {
@@ -276,11 +336,13 @@ enum AutoplayMode implements ButtonState<AutoplayMode> {
             icon: Icons.repeat_one,
             style: IconButtons.outlined,
             tooltip: 'Repeat',
+            selectedStyle: false,
           ),
         autoplay => const (
             icon: Icons.fast_forward,
-            style: IconButtons.filledTonal,
+            style: IconButtons.outlined,
             tooltip: 'Autoplay',
+            selectedStyle: true,
           ),
       };
 
@@ -300,11 +362,13 @@ enum ShuffleMode implements ButtonState<ShuffleMode> {
             icon: Icons.arrow_forward,
             style: IconButtons.outlined,
             tooltip: 'Sequential',
+            selectedStyle: false,
           ),
         shuffle => const (
             icon: Icons.shuffle,
-            style: IconButtons.filledTonal,
+            style: IconButtons.outlined,
             tooltip: 'Shuffle',
+            selectedStyle: true,
           ),
       };
 
