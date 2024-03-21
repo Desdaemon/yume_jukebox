@@ -1,0 +1,18 @@
+// rename this file to manifest.dart to start using it
+part of 'track.dart';
+
+const _manifest = <Track>[
+  Track(
+    // The convention is that the first track is always variant A,
+    // and subsequence variants are B, C, D, etc.
+    path: 'music/foo.ogg',
+    gameEvent: 'Foo',
+    background: 'images/foo.png',
+    variants: [
+      Variant(
+        gameEvent: 'Bar',
+        speed: 1.2,
+      ),
+    ],
+  ),
+];

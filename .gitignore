@@ -45,3 +45,4 @@ app.*.map.json
 # Assets
 music/
 images/
+lib/manifest.dart

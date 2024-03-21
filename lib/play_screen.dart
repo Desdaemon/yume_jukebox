@@ -1,18 +1,21 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
+
 import 'package:assets_audio_player/assets_audio_player.dart';
 import 'package:duration_picker/duration_picker.dart';
-import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:text_scroll/text_scroll.dart';
 
-import 'main.dart';
+import 'track.dart';
 import 'with_atom.dart';
 import 'stateful_button.dart';
 
 class PlayScreen extends StatefulWidget {
-  const PlayScreen({super.key});
+  const PlayScreen({super.key, required this.baseTheme});
+
+  final ThemeData baseTheme;
 
   @override
   State<PlayScreen> createState() => _PlayScreenState();
@@ -22,47 +25,55 @@ class _PlayScreenState extends State<PlayScreen>
     with AtomHelpers, SingleTickerProviderStateMixin {
   bool isPlaying = false;
 
-  late Track track;
+  late Track _track;
+  Track get track => _track;
+  set track(Track track) {
+    _track = track;
+    activeVariant = null;
+    activeVariantName = 'A';
+  }
+
+  Variant? _activeVariant;
+  Variant? get activeVariant => _activeVariant;
+  set activeVariant(Variant? variant) {
+    final hasDifferentBackground =
+        (variant?.background ?? track.background) != info.background;
+    _activeVariant = variant;
+    if (hasDifferentBackground) updateThemeColors();
+  }
+
+  var activeVariantName = 'A';
   late AssetsAudioPlayer player;
-  late AnimationController controller;
+
+  ({String background, String gameEvent}) get info => (
+        background: activeVariant?.background ?? track.background,
+        gameEvent: activeVariant?.gameEvent ?? track.gameEvent,
+      );
+
+  late final controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 200),
+  );
   final subscriptions = <StreamSubscription>[];
   Timer? sleepTimer;
   Timer? autoplayTimer;
+  ThemeData? data;
+
+  static void noop() {}
 
   @override
   void initState() {
     super.initState();
 
-    player = AssetsAudioPlayer.newPlayer();
-    controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-
-    final initialIndex = Track.currentTrackIndex();
-    effect(() {
-      final tracks = Track.repo();
-      final playlist = tracks.map((track) {
-        return Audio(
-          track.assetPath,
-          metas: Metas(
-            title: track.name,
-            image: MetasImage(
-              path: track.background,
-              type: ImageType.asset,
-            ),
-            album: 'Yume 2kki OST',
-          ),
-        );
-      }).toList(growable: false);
-      player.open(
-        Playlist(audios: playlist, startIndex: initialIndex),
+    player = AssetsAudioPlayer.newPlayer()
+      ..open(
+        Playlist(audios: Track.audios, startIndex: Track.currentTrackIndex()),
         loopMode: LoopMode.single,
+        headPhoneStrategy: HeadPhoneStrategy.pauseOnUnplugPlayOnPlug,
         autoStart: false,
         showNotification: true,
         volume: .5,
       );
-    });
 
     subscriptions.add(player.current.listen((current) {
       if (current != null) {
@@ -70,31 +81,35 @@ class _PlayScreenState extends State<PlayScreen>
       }
     }));
 
-    effect(() {
+    effect(() async {
       final index = Track.currentTrackIndex();
+      final needsThemeUpdate = !player.current.hasValue ||
+          info.background != Track.repo[index].background;
       setState(() {
-        track = Track.repo()[index];
-        _drivePlayPauseAnimation(isPlaying: true);
+        track = Track.repo[index];
+        drivePlayPauseAnimation(isPlaying: true);
       });
-      Future.wait([
-        ColorScheme.fromImageProvider(
-          provider: AssetImage(track.background),
-        ),
-        ColorScheme.fromImageProvider(
-          provider: AssetImage(track.background),
-          brightness: Brightness.dark,
-        ),
-      ]).then((data) {
-        if (!mounted) return;
-        colorScheme.set((data[0], data[1]));
-      });
+      if (needsThemeUpdate) updateThemeColors();
       if (!player.current.hasValue || player.current.value?.index != index) {
+        debugPrint('Setting track speed to ${track.speed}');
+        await player.setPlaySpeed(track.speed);
+        await player.setPitch(track.speed);
         player.playlistPlayAtIndex(index);
       }
     });
   }
 
-  void _drivePlayPauseAnimation({required bool isPlaying}) {
+  void updateThemeColors() async {
+    debugPrint('Updating with ${info.background}');
+    final scheme = await ColorScheme.fromImageProvider(
+      provider: AssetImage(info.background),
+      brightness: widget.baseTheme.brightness,
+    );
+    if (!mounted) return;
+    setState(() => data = widget.baseTheme.copyWith(colorScheme: scheme));
+  }
+
+  void drivePlayPauseAnimation({required bool isPlaying}) {
     this.isPlaying = isPlaying;
     if (isPlaying) {
       controller.forward();
@@ -114,21 +129,34 @@ class _PlayScreenState extends State<PlayScreen>
     player.dispose();
   }
 
+  static const transitionDuration = Duration(milliseconds: 700);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(children: [
-        SizedBox.expand(
-          child: Image.asset(
-            track.background,
-            key: ValueKey(track.background),
-            fit: BoxFit.cover,
-            colorBlendMode: BlendMode.srcOver,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withAlpha(0x44)
-                : null,
+        AnimatedSwitcher(
+          duration: transitionDuration,
+          child: SizedBox.expand(
+            key: ValueKey(info.background),
+            child: Image.asset(
+              info.background,
+              fit: BoxFit.cover,
+              colorBlendMode: BlendMode.srcOver,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black.withAlpha(0x44)
+                  : null,
+            ),
           ),
         ),
+        // SizedBox.expand(
+        //   child: ParallaxRain(
+        //     key: const ValueKey(true),
+        //     numberOfDrops: 100,
+        //     dropFallSpeed: 20,
+        //     dropColors: const [Colors.grey],
+        //   ),
+        // ),
         Positioned(
           bottom: 24,
           left: 18,
@@ -136,16 +164,20 @@ class _PlayScreenState extends State<PlayScreen>
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: _playerControls,
+              filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+              child: AnimatedTheme(
+                data: data ?? Theme.of(context),
+                duration: transitionDuration,
+                child: playerControls,
+              ),
             ),
           ),
-        ) // Positioned
+        )
       ]),
     );
   }
 
-  Widget get _playerControls {
+  Widget get playerControls {
     return Container(
       padding: const EdgeInsets.all(12),
       color: Theme.of(context).colorScheme.background.withOpacity(.75),
@@ -158,11 +190,11 @@ class _PlayScreenState extends State<PlayScreen>
             delayBefore: const Duration(seconds: 2),
             pauseBetween: const Duration(seconds: 2),
           ),
-          if (track.gameEvent.isNotEmpty)
+          if (info.gameEvent.isNotEmpty)
             Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
               const Icon(Icons.location_pin),
               Text(
-                track.gameEvent,
+                info.gameEvent,
                 style: Theme.of(context).textTheme.titleSmall,
               ),
             ]),
@@ -178,19 +210,20 @@ class _PlayScreenState extends State<PlayScreen>
                   icon: const Icon(Icons.bedtime),
                   isSelected: sleepTimer != null,
                   visualDensity: VisualDensity.compact,
-                  onPressed: _handleSleep,
+                  onPressed: handleSleep,
                 ),
                 const Gap(8),
-                IconButton.outlined(
+                // TODO
+                const IconButton.outlined(
                   tooltip: 'Add to playlist',
-                  icon: const Icon(Icons.playlist_add),
+                  icon: Icon(Icons.playlist_add),
                   visualDensity: VisualDensity.compact,
-                  onPressed: () {},
+                  onPressed: noop,
                 ),
                 const Gap(8),
                 AnimatedSize(
                   duration: const Duration(milliseconds: 500),
-                  child: !isPlaying ? const SizedBox.shrink() : _variantPicker,
+                  child: track.variants.isEmpty ? null : variantPicker,
                 )
               ],
             ),
@@ -204,8 +237,9 @@ class _PlayScreenState extends State<PlayScreen>
                 selected: AutoplayMode.repeat,
                 iconSize: 32,
                 stateChanged: (mode) async {
-                  final result = await _handleAutoplay(
-                      wantAutoplay: mode.nextState == AutoplayMode.autoplay);
+                  final result = await handleAutoplay(
+                    wantAutoplay: mode.nextState == AutoplayMode.autoplay,
+                  );
                   return result ? AutoplayMode.autoplay : AutoplayMode.repeat;
                 },
               ),
@@ -213,9 +247,8 @@ class _PlayScreenState extends State<PlayScreen>
               IconButton.outlined(
                 tooltip: 'Previous',
                 onPressed: () {
-                  Track.setNextTrack(
-                      delta: -1, backInQueue: true, shuffle: false);
-                  _drivePlayPauseAnimation(isPlaying: true);
+                  Track.setNextTrack(delta: -1, shuffle: false);
+                  drivePlayPauseAnimation(isPlaying: true);
                 },
                 icon: const Icon(Icons.skip_previous),
                 iconSize: 32,
@@ -224,7 +257,9 @@ class _PlayScreenState extends State<PlayScreen>
               IconButton.filled(
                 onPressed: () {
                   player.playOrPause();
-                  _drivePlayPauseAnimation(isPlaying: !isPlaying);
+                  setState(() {
+                    drivePlayPauseAnimation(isPlaying: !isPlaying);
+                  });
                 },
                 icon: AnimatedIcon(
                   icon: AnimatedIcons.play_pause,
@@ -237,7 +272,7 @@ class _PlayScreenState extends State<PlayScreen>
               IconButton.outlined(
                 onPressed: () {
                   Track.setNextTrack(delta: 1, shuffle: player.shuffle);
-                  _drivePlayPauseAnimation(isPlaying: true);
+                  drivePlayPauseAnimation(isPlaying: true);
                 },
                 icon: const Icon(Icons.skip_next),
                 iconSize: 32,
@@ -258,7 +293,7 @@ class _PlayScreenState extends State<PlayScreen>
     );
   }
 
-  Future<bool> _handleAutoplay({bool wantAutoplay = true}) async {
+  Future<bool> handleAutoplay({bool wantAutoplay = true}) async {
     if (autoplayTimer != null && !wantAutoplay) {
       autoplayTimer!.cancel();
       setState(() {
@@ -269,20 +304,19 @@ class _PlayScreenState extends State<PlayScreen>
     if (!wantAutoplay) return false;
     final delay = await showDurationPicker(
       context: context,
-      initialTime: const Duration(minutes: 2),
-      baseUnit: BaseUnit.second,
+      initialTime: const Duration(minutes: 10),
     );
     if (!mounted || delay == null) return false;
     setState(() {
       autoplayTimer = Timer.periodic(delay, (_) {
-        if (!mounted) return;
+        if (!mounted || !isPlaying) return;
         Track.setNextTrack(delta: 1, shuffle: player.shuffle);
       });
     });
     return true;
   }
 
-  void _handleSleep() async {
+  void handleSleep() async {
     if (sleepTimer != null) {
       sleepTimer!.cancel();
       setState(() {
@@ -304,25 +338,86 @@ class _PlayScreenState extends State<PlayScreen>
     });
   }
 
-  Widget get _variantPicker {
-    var active = 'A';
-    return StatefulBuilder(
-      builder: (context, $setState) {
-        return Wrap(spacing: 2, children: [
-          for (final variant in 'ABCDEF'.characters)
-            ChoiceChip(
-              label: Text(variant),
-              selected: variant == active,
-              visualDensity: VisualDensity.compact,
-              onSelected: (selected) {
-                if (selected) {
-                  $setState(() => active = variant);
-                }
-              },
-            )
-        ]);
-      },
-    );
+  Widget get variantPicker {
+    return Wrap(spacing: 2, children: [
+      ChoiceChip(
+        key: const ValueKey('A'),
+        label: const Text('A'),
+        selected: activeVariantName == 'A',
+        visualDensity: VisualDensity.compact,
+        onSelected: (selected) {
+          if (selected) selectVariant(track);
+          setState(() => activeVariantName = 'A');
+        },
+      ),
+      for (final (name, variant) in track.namedVariants)
+        ChoiceChip(
+          key: ValueKey(name),
+          label: Text(name),
+          selected: name == activeVariantName,
+          visualDensity: VisualDensity.compact,
+          onSelected: (selected) {
+            if (selected) selectVariant(variant);
+            setState(() => activeVariantName = name);
+          },
+        )
+    ]);
+  }
+
+  final variantIndex = WeakMap<Variant, int>();
+  void selectVariant(Variant variant) async {
+    await player.setPlaySpeed(variant.speed);
+    await player.setPitch(variant.speed);
+
+    if (variantIndex[variant] case final index?) {
+      if (!isPlaying) {
+        player.playlistPlayAtIndex(index);
+        drivePlayPauseAnimation(isPlaying: true);
+      }
+      setState(() {
+        activeVariant = variant;
+      });
+      return;
+    }
+
+    if (variant is Track) {
+      if (!isPlaying) {
+        Track.currentTrackIndex.set(Track.repo.indexOf(variant));
+        return;
+      }
+      setState(() {
+        activeVariant = null;
+      });
+      return;
+    }
+
+    setState(() {
+      activeVariant = variant;
+    });
+
+    if (variant.path == null || variant.path == track.path) {
+      return;
+    }
+
+    final index = player.playlist!.audios.length - 1;
+    player.playlist!.add(Audio(
+      variant.path!,
+      playSpeed: variant.speed,
+      pitch: variant.speed,
+      metas: Metas(
+        title: variant.name ?? track.name,
+        album: 'Yume 2kki OST',
+        image: MetasImage(
+          path: variant.background ?? track.background,
+          type: ImageType.asset,
+        ),
+      ),
+    ));
+    variantIndex[variant] = index;
+    player.playlistPlayAtIndex(index);
+    setState(() {
+      drivePlayPauseAnimation(isPlaying: true);
+    });
   }
 }
 

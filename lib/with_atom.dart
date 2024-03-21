@@ -43,7 +43,7 @@ class AtomBuilder<T> extends StatelessWidget {
         setState_ = $setState;
         atom.Effect? effect;
         effect = atom.effect(() {
-          final _ = _atom();
+          _atom();
           if (!context.mounted) return;
           setState_(() {
             effect?.cancel();
