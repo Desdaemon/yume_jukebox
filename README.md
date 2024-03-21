@@ -1,16 +1,14 @@
 # yume_jukebox
 
-A new Flutter project.
+Yume 2kki's Music Room on the go.
 
-## Getting Started
+<img src="https://github.com/Desdaemon/yume_jukebox/assets/36768030/10bf1ff1-c787-433d-be7a-f861d15bc441" width="400" alt="A preview of the app, showing the track played in Eyeball Cherry Field alongside its panorama.">
 
-This project is a starting point for a Flutter application.
+## Usage
 
-A few resources to get you started if this is your first Flutter project:
+This app does not come with tracks or graphics by default; please import those files into `images` and `music`
+and fill out `lib/manifest.dart` to enumerate them. Once done, you can run `flutter build apk` and `flutter install` to
+install the app.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Once the app is in a more polished state, a script will be available to automatically extract the files needed from your
+local Yume 2kki installation.
