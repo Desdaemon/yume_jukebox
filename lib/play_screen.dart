@@ -157,6 +157,7 @@ class _PlayScreenState extends State<PlayScreen>
         //     dropColors: const [Colors.grey],
         //   ),
         // ),
+        AppBar(backgroundColor: Colors.transparent),
         Positioned(
           bottom: 24,
           left: 18,
@@ -334,7 +335,9 @@ class _PlayScreenState extends State<PlayScreen>
       content: Text('Sleeping in $delay'),
     ));
     setState(() {
-      sleepTimer = Timer(delay, player.stop);
+      sleepTimer = Timer(delay, () {
+        Navigator.of(context).pop();
+      });
     });
   }
 

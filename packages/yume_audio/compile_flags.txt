@@ -1,0 +1,5 @@
+-I./include
+-xc++
+-Wall
+-Werror
+-Wpedantic
