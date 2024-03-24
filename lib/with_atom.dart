@@ -8,14 +8,14 @@ mixin AtomHelpers<T extends StatefulWidget> on State<T> {
     _effects.add(atom.effect(effect));
   }
 
-  void once(void Function() effect) {
-    atom.Effect? effect_;
-    try {
-      effect_ = atom.effect(effect);
-    } finally {
-      effect_?.cancel();
-    }
-  }
+  // void once(void Function() effect) {
+  //   atom.Effect? effect_;
+  //   try {
+  //     effect_ = atom.effect(effect);
+  //   } finally {
+  //     effect_?.cancel();
+  //   }
+  // }
 
   @override
   void dispose() {

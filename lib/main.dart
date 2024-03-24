@@ -45,15 +45,15 @@ class _TrackListingScreen extends State<StatefulWidget> with AtomHelpers {
       appBar: AppBar(title: const Text('Yume 2kki Jukebox')),
       body: ListView.builder(
         itemCount: value.length,
-        itemBuilder: (context, idx) {
-          final item = value[idx];
+        itemBuilder: (context, index) {
+          final item = value[index];
           return ListTile(
             title: Text(item.name),
             onTap: () {
-              Track.currentTrackIndex.set(idx);
               Navigator.of(context).push(MaterialPageRoute(builder: (_) {
                 return PlayScreen(
                   baseTheme: Theme.of(context),
+                  initialIndex: index,
                 );
               }));
             },

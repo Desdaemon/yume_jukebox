@@ -27,53 +27,85 @@ class YumeAudioBindings {
           lookup)
       : _lookup = lookup;
 
-  ffi.Pointer<Player> yume_audio_init(
-    ffi.Pointer<ffi.Char> path,
-  ) {
-    return _yume_audio_init(
-      path,
-    );
-  }
-
-  late final _yume_audio_initPtr = _lookup<
-          ffi
-          .NativeFunction<ffi.Pointer<Player> Function(ffi.Pointer<ffi.Char>)>>(
-      'yume_audio_init');
-  late final _yume_audio_init = _yume_audio_initPtr
-      .asFunction<ffi.Pointer<Player> Function(ffi.Pointer<ffi.Char>)>();
-
-  void yume_audio_play(
-    ffi.Pointer<Player> player,
-  ) {
-    return _yume_audio_play(
-      player,
-    );
-  }
-
-  late final _yume_audio_playPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<Player>)>>(
-          'yume_audio_play');
-  late final _yume_audio_play =
-      _yume_audio_playPtr.asFunction<void Function(ffi.Pointer<Player>)>();
-
-  void yume_audio_set_pitch(
-    ffi.Pointer<Player> player,
+  /// \ref pitch is a multiplier value where 1.0 is the original pitch.
+  ffi.Pointer<AudioStream> play_with_pitch(
+    ffi.Pointer<ffi.Char> input_path,
     double pitch,
   ) {
-    return _yume_audio_set_pitch(
-      player,
+    return _play_with_pitch(
+      input_path,
       pitch,
     );
   }
 
-  late final _yume_audio_set_pitchPtr = _lookup<
-          ffi
-          .NativeFunction<ffi.Void Function(ffi.Pointer<Player>, ffi.Float)>>(
-      'yume_audio_set_pitch');
-  late final _yume_audio_set_pitch = _yume_audio_set_pitchPtr
-      .asFunction<void Function(ffi.Pointer<Player>, double)>();
+  late final _play_with_pitchPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Pointer<AudioStream> Function(
+              ffi.Pointer<ffi.Char>, ffi.Float)>>('play_with_pitch');
+  late final _play_with_pitch = _play_with_pitchPtr.asFunction<
+      ffi.Pointer<AudioStream> Function(ffi.Pointer<ffi.Char>, double)>();
+
+  /// Once called, the stream will be disposed and the audio will stop playing.
+  void dispose_stream(
+    ffi.Pointer<AudioStream> stream,
+  ) {
+    return _dispose_stream(
+      stream,
+    );
+  }
+
+  late final _dispose_streamPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<AudioStream>)>>(
+          'dispose_stream');
+  late final _dispose_stream =
+      _dispose_streamPtr.asFunction<void Function(ffi.Pointer<AudioStream>)>();
+
+  void set_pitch(
+    ffi.Pointer<AudioStream> stream,
+    double pitch,
+  ) {
+    return _set_pitch(
+      stream,
+      pitch,
+    );
+  }
+
+  late final _set_pitchPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<AudioStream>, ffi.Float)>>('set_pitch');
+  late final _set_pitch = _set_pitchPtr
+      .asFunction<void Function(ffi.Pointer<AudioStream>, double)>();
+
+  /// Pass \ref [StreamStatus] to change the state of the stream.
+  void request_state_change(
+    ffi.Pointer<AudioStream> stream,
+    int state,
+  ) {
+    return _request_state_change(
+      stream,
+      state,
+    );
+  }
+
+  late final _request_state_changePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.Pointer<AudioStream>, ffi.Int32)>>('request_state_change');
+  late final _request_state_change = _request_state_changePtr
+      .asFunction<void Function(ffi.Pointer<AudioStream>, int)>();
 }
 
-final class _Player extends ffi.Opaque {}
+final class _AudioStream extends ffi.Opaque {}
 
-typedef Player = _Player;
+abstract class StreamStatus {
+  static const int pause_stream = 0;
+  static const int start_stream = 1;
+  static const int stop_stream = 2;
+}
+
+final class PlayOptions extends ffi.Struct {
+  @ffi.Float()
+  external double pitch;
+}
+
+typedef AudioStream = _AudioStream;

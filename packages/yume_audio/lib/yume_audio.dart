@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 import 'dart:ffi';
@@ -8,50 +7,33 @@ import 'package:ffi/ffi.dart';
 
 import 'yume_audio_bindings_generated.dart' as ffi;
 
-// /// A very short-lived native function.
-// ///
-// /// For very short-lived functions, it is fine to call them on the main isolate.
-// /// They will block the Dart execution while running the native function, so
-// /// only do this for native functions which are guaranteed to be short-lived.
-// int sum(int a, int b) => _bindings.sum(a, b);
+class AudioStream {
+  final Pointer<ffi.AudioStream> _stream;
 
-// /// A longer lived native function, which occupies the thread calling it.
-// ///
-// /// Do not call these kind of native functions in the main isolate. They will
-// /// block Dart execution. This will cause dropped frames in Flutter applications.
-// /// Instead, call these native functions on a separate isolate.
-// ///
-// /// Modify this to suit your own use case. Example use cases:
-// ///
-// /// 1. Reuse a single isolate for various different kinds of requests.
-// /// 2. Use multiple helper isolates for parallel execution.
-// Future<int> sumAsync(int a, int b) async {
-//   final SendPort helperIsolateSendPort = await _helperIsolateSendPort;
-//   final int requestId = _nextSumRequestId++;
-//   final _SumRequest request = _SumRequest(requestId, a, b);
-//   final Completer<int> completer = Completer<int>();
-//   _sumRequests[requestId] = completer;
-//   helperIsolateSendPort.send(request);
-//   return completer.future;
-// }
-
-class Player {
-  final Pointer<ffi.Player> _player;
-  const Player._(this._player);
-
-  factory Player(String path) {
-    final Pointer<Char> pathPtr = path.toNativeUtf8().cast();
-    final Pointer<ffi.Player> player = _bindings.yume_audio_init(pathPtr);
-    NativeApi.initializeApiDLData;
-    return Player._(player);
+  const AudioStream._(this._stream);
+  static Future<AudioStream?> init(String path, {double pitch = 1.0}) async {
+    final SendPort helperIsolateSendPort = await _helperIsolateSendPort;
+    final int requestId = _nextPlayRequestId++;
+    final request = PlayRequest(path, pitch: pitch, id: requestId);
+    final completer = Completer<AudioStream?>();
+    _playRequests[requestId] = completer;
+    helperIsolateSendPort.send(request);
+    return completer.future;
   }
 
-  set pitch(double pitch) => _bindings.yume_audio_set_pitch(_player, pitch);
+  void dispose() => _bindings.dispose_stream(_stream);
+  set pitch(double pitch) => _bindings.set_pitch(_stream, pitch);
+
+  set _status(int status) => _bindings.request_state_change(_stream, status);
+
+  void pause() => _status = ffi.StreamStatus.pause_stream;
+  void start() => _status = ffi.StreamStatus.start_stream;
+  void stop() => _status = ffi.StreamStatus.stop_stream;
 }
 
 const String _libName = 'yume_audio';
 
-/// The dynamic library in which the symbols for [YumeAudioBindings] can be found.
+/// The dynamic library in which the symbols for [ffi.YumeAudioBindings] can be found.
 final DynamicLibrary _dylib = () {
   if (Platform.isMacOS || Platform.isIOS) {
     return DynamicLibrary.open('$_libName.framework/$_libName');
@@ -68,33 +50,32 @@ final DynamicLibrary _dylib = () {
 /// The bindings to the native functions in [_dylib].
 final ffi.YumeAudioBindings _bindings = ffi.YumeAudioBindings(_dylib);
 
+sealed class FfiRequest {
+  final int id;
+  const FfiRequest({required this.id});
+}
 
-// /// A request to compute `sum`.
-// ///
-// /// Typically sent from one isolate to another.
-// class _SumRequest {
-//   final int id;
-//   final int a;
-//   final int b;
+final class PlayRequest extends FfiRequest {
+  final String path;
+  final double pitch;
+  const PlayRequest(this.path, {this.pitch = 1.0, required super.id});
+}
 
-//   const _SumRequest(this.id, this.a, this.b);
-// }
+sealed class FfiResponse {
+  final int id;
+  const FfiResponse({required this.id});
+}
 
-// /// A response with the result of `sum`.
-// ///
-// /// Typically sent from one isolate to another.
-// class _SumResponse {
-//   final int id;
-//   final int result;
+final class PlayResponse extends FfiResponse {
+  final Pointer<ffi.AudioStream> stream;
+  const PlayResponse({required this.stream, required super.id});
+}
 
-//   const _SumResponse(this.id, this.result);
-// }
+/// Counter to identify [FfiRequest]s and [FfiResponse]s.
+int _nextPlayRequestId = 0;
 
-/// Counter to identify [_SumRequest]s and [_SumResponse]s.
-int _nextSumRequestId = 0;
-
-/// Mapping from [_SumRequest] `id`s to the completers corresponding to the correct future of the pending request.
-final Map<int, Completer<int>> _sumRequests = <int, Completer<int>>{};
+/// Mapping from [FfiRequest] `id`s to the completers corresponding to the correct future of the pending request.
+final _playRequests = <int, Completer<AudioStream?>>{};
 
 /// The SendPort belonging to the helper isolate.
 Future<SendPort> _helperIsolateSendPort = () async {
@@ -113,14 +94,15 @@ Future<SendPort> _helperIsolateSendPort = () async {
         completer.complete(data);
         return;
       }
-      // if (data is _SumResponse) {
-      //   // The helper isolate sent us a response to a request we sent.
-      //   final Completer<int> completer = _sumRequests[data.id]!;
-      //   _sumRequests.remove(data.id);
-      //   completer.complete(data.result);
-      //   return;
-      // }
-      throw UnsupportedError('Unsupported message type: ${data.runtimeType}');
+      if (data is! FfiResponse) {
+        throw UnsupportedError('Unsupported message type: ${data.runtimeType}');
+      }
+      switch (data) {
+        case PlayResponse(:var id, :var stream):
+          final completer = _playRequests[id]!;
+          _playRequests.remove(data.id);
+          completer.complete(stream == nullptr ? null : AudioStream._(stream));
+      }
     });
 
   // Start the helper isolate.
@@ -128,13 +110,17 @@ Future<SendPort> _helperIsolateSendPort = () async {
     final ReceivePort helperReceivePort = ReceivePort()
       ..listen((dynamic data) {
         // On the helper isolate listen to requests and respond to them.
-        // if (data is _SumRequest) {
-        //   final int result = _bindings.sum_long_running(data.a, data.b);
-        //   final _SumResponse response = _SumResponse(data.id, result);
-        //   sendPort.send(response);
-        //   return;
-        // }
-        throw UnsupportedError('Unsupported message type: ${data.runtimeType}');
+        if (data is! FfiRequest) {
+          throw UnsupportedError(
+              'Unsupported message type: ${data.runtimeType}');
+        }
+        switch (data) {
+          case PlayRequest(:var path, :var pitch):
+            final pathbuf = path.toNativeUtf8();
+            final stream = _bindings.play_with_pitch(pathbuf.cast(), pitch);
+            final response = PlayResponse(stream: stream, id: data.id);
+            sendPort.send(response);
+        }
       });
 
     // Send the port to the main isolate on which we can receive requests.

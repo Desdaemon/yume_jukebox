@@ -3,46 +3,70 @@
 #if _WIN32
 #define FFI_PLUGIN_EXPORT __declspec(dllexport)
 #else
-#define FFI_PLUGIN_EXPORT __attribute__((visibility("default"))) __attribute__((used))
+#define FFI_PLUGIN_EXPORT                                                      \
+  __attribute__((visibility("default"))) __attribute__((used))
 #endif
 
 #if __cplusplus
-#include "signalsmith-stretch.h"
-#include <fstream>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 #if _WIN32
 #include <windows.h>
+typedef struct _AudioStream AudioStream;
 #else
 #include <oboe/Oboe.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <vorbis/vorbisfile.h>
-
-#endif
-
 using namespace oboe;
-
-class Player {
-public:
-  float pitch = 1;
-  OggVorbis_File vf;
-};
-
-class PlayerDataCallback : public oboe::AudioStreamDataCallback {
-public:
-  Player *player;
-  float **buffer[4096];
-  signalsmith::stretch::SignalsmithStretch<> stretch;
-  PlayerDataCallback(Player *player) { this->player = player; }
-  DataCallbackResult onAudioReady(AudioStream *audioStream, void *audioData, int32_t numFrames) override;
-};
-#else
-typedef struct _Player Player;
 #endif
 
-FFI_PLUGIN_EXPORT Player *yume_audio_init(const char *path);
-FFI_PLUGIN_EXPORT void yume_audio_play(Player *player);
-FFI_PLUGIN_EXPORT void yume_audio_set_pitch(Player *player, float pitch);
+#ifndef defer
+struct defer_dummy {};
+template <class F> struct deferrer {
+  F f;
+  ~deferrer() { f(); }
+};
+template <class F> deferrer<F> operator*(defer_dummy, F f) { return {f}; }
+#define DEFER_(LINE) zz_defer##LINE
+#define DEFER(LINE) DEFER_(LINE)
+#define defer auto DEFER(__LINE__) = defer_dummy{} *[&]()
+#endif // defer
+
+#else
+typedef struct _AudioStream AudioStream;
+#endif // __cplusplus
+
+#if __cplusplus
+extern "C" {
+#endif
+
+typedef enum { pause_stream, start_stream, stop_stream } StreamStatus;
+
+typedef struct {
+  float pitch;
+} PlayOptions;
+
+/// [pitch] is a multiplier value where 1.0 is the original pitch.
+FFI_PLUGIN_EXPORT AudioStream *play_with_pitch(char *input_path, float pitch);
+
+// Once called, the stream will be disposed and the audio will stop playing.
+FFI_PLUGIN_EXPORT void dispose_stream(AudioStream *stream);
+
+FFI_PLUGIN_EXPORT void set_pitch(AudioStream *stream, float pitch);
+
+/// Pass [StreamStatus] to change the state of the stream.
+FFI_PLUGIN_EXPORT void request_state_change(AudioStream *stream,
+                                            StreamStatus state);
+
+typedef struct {
+  int32_t sample_rate;
+  int32_t bit_rate;
+  int32_t channel_mask;
+  int32_t channels;
+  int32_t bytes_written;
+} DecodeResult;
+
+static std::optional<DecodeResult> decode(const char *__restrict input_path,
+                                          uint8_t *__restrict target_data);
+#if __cplusplus
+} // extern "C"
+#endif
