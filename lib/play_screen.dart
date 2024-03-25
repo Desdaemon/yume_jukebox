@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -21,26 +22,30 @@ class PlayScreen extends StatefulWidget {
   State<PlayScreen> createState() => _PlayScreenState();
 }
 
-class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
+class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateMixin {
   static const newTrackTransitionDuration = Duration(milliseconds: 700);
 
   bool get isPlaying => player.current.hasValue && player.current.value != null;
+
+  ({int index, String background}) tombstone = defaultTombstone;
+  static const defaultTombstone = (index: -1, background: Variant.fallbackBackground);
+  String get activeBackground => _activeVariant?.background ?? _track.background;
+  String get activeEvent => _activeVariant?.event ?? _track.event;
 
   late Track _track = Track.repo[widget.initialIndex];
   Track get track => _track;
   set track(Track track) {
     final backgroundChanged = track.background != activeBackground;
     _track = track;
-    activeVariant = null;
+    setState(() {
+      _activeVariant = null;
+    });
     activeVariantName = 'A';
     if (backgroundChanged) updateThemeColors();
   }
 
   Variant? _activeVariant;
   Variant? get activeVariant => _activeVariant;
-  String get activeBackground => _activeVariant?.background ?? _track.background;
-  String get activeEvent => _activeVariant?.event ?? track.event;
-
   set activeVariant(Variant? variant) {
     final backgroundChanged = (variant?.background ?? _track.background) != activeBackground;
     setState(() {
@@ -99,18 +104,20 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
       final index = current == null ? null : Track.audios.indexOf(current.audio.audio);
       if (!mounted || index == null || index == -1) return;
 
-      debugPrint('index=$index active=$activeTrackIndex track=$track variant=$activeVariant');
+      // debugPrint('index=$index active=$activeTrackIndex track=$track variant=$activeVariant');
       if (index < Track.repo.length && index != activeTrackIndex) {
+        tombstone = (index: activeTrackIndex, background: activeBackground);
         activeTrackIndex = index;
         final screenWidth = MediaQuery.of(context).size.width;
-        final currentPositionAsIndex = (backgroundSlideController.offset / screenWidth).round();
-        backgroundSlideController.animateTo(
-          index * screenWidth,
-          duration: (index - currentPositionAsIndex).abs() > 2
-              ? const Duration(milliseconds: 1500)
-              : newTrackTransitionDuration,
+        final screens = (backgroundSlideController.offset / screenWidth).ceil();
+        final timesWrapped = (screens / Track.repo.length).floor();
+        (backgroundSlideController.animateTo)(
+          screenWidth * (Track.repo.length * timesWrapped + index),
+          duration: newTrackTransitionDuration,
           curve: Curves.easeInOut,
-        );
+        ).then((_) {
+          tombstone = defaultTombstone;
+        });
         track = Track.repo[index];
         drivePlayPauseAnimation(toPlay: true);
       }
@@ -120,6 +127,7 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
       updateThemeColors();
       backgroundSlideController.position.isScrollingNotifier.addListener(() {
         if (backgroundSlideController.position.isScrollingNotifier.value) return;
+        tombstone = defaultTombstone;
         final index =
             (backgroundSlideController.offset / MediaQuery.of(context).size.width).round() % Track.repo.length;
         if (index != player.current.value?.index && index != activeTrackIndex) {
@@ -130,7 +138,7 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
   }
 
   void updateThemeColors() async {
-    debugPrint('Updating with $activeBackground');
+    // debugPrint('Updating with $activeBackground');
     final scheme = await ColorScheme.fromImageProvider(
       provider: AssetImage(activeBackground),
       brightness: widget.baseTheme.brightness,
@@ -189,6 +197,14 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
                   ),
                 );
               }
+              if (wrappedIndex == tombstone.index) {
+                return Image.asset(
+                  tombstone.background,
+                  fit: BoxFit.cover,
+                  colorBlendMode: BlendMode.srcOver,
+                  color: Theme.of(context).brightness == Brightness.dark ? Colors.black.withAlpha(0x44) : null,
+                );
+              }
               return Image.asset(
                 track.background,
                 fit: BoxFit.cover,
@@ -234,14 +250,22 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextScroll(
-            track.name,
-            style: Theme.of(context).textTheme.headlineMedium,
-            delayBefore: const Duration(seconds: 2),
-            pauseBetween: const Duration(seconds: 2),
-          ),
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Flexible(
+              flex: 1,
+              child: TextScroll(
+                track.name,
+                style: Theme.of(context).textTheme.headlineMedium,
+                delayBefore: const Duration(seconds: 2),
+                pauseBetween: const Duration(seconds: 2),
+              ),
+            ),
+            if (track.entry != null) const Gap(8),
+            if (track.entry case final entry?)
+              Badge(label: Text(track.variants.isEmpty ? '$entry' : '$entry$activeVariantName')),
+          ]),
           if (activeEvent.isNotEmpty)
-            Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+            Wrap(spacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
               const Icon(Icons.location_pin),
               Text(activeEvent, style: Theme.of(context).textTheme.titleSmall),
             ]),
@@ -424,6 +448,10 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
     activeVariant = variant;
 
     if (variant.path == track.path) {
+      if (variant.path != player.current.value?.audio.assetAudioPath) {
+        player.playlistPlayAtIndex(activeTrackIndex);
+        drivePlayPauseAnimation(toPlay: true);
+      }
       return;
     }
 

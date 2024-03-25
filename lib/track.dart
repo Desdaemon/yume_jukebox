@@ -54,7 +54,8 @@ class Track extends Variant {
     }
   }
 
-  static List<Track> get repo => _manifest;
+  static List<Track> get repo =>
+      _manifest.toList(growable: false)..sort((a, b) => (a.entry ?? -1).compareTo(b.entry ?? -1));
   static List<Audio> audios = repo.map((track) {
     return Audio(
       track.path,
