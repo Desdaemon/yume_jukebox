@@ -42,13 +42,17 @@ class _TrackListingScreen extends State<StatefulWidget> with AtomHelpers {
   Widget build(BuildContext context) {
     final value = Track.repo;
     return Scaffold(
-      appBar: AppBar(title: const Text('Yume 2kki Jukebox')),
+      appBar: AppBar(title: const Text('Sound Room')),
       body: ListView.builder(
         itemCount: value.length,
         itemBuilder: (context, index) {
-          final item = value[index];
+          final track = value[index];
           return ListTile(
-            title: Text(item.name),
+            title: Text(track.name),
+            subtitle: track.event.isNotEmpty ? Text(track.event) : null,
+            trailing: track.variants.isNotEmpty
+                ? Text('■' * (track.variants.length + 1))
+                : null,
             onTap: () {
               Navigator.of(context).push(MaterialPageRoute(builder: (_) {
                 return PlayScreen(
