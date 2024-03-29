@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -55,6 +54,7 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
   }
 
   var activeVariantName = 'A';
+  Duration? autoplayDuration;
   late AssetsAudioPlayer player;
   late int activeTrackIndex = -1;
 
@@ -104,7 +104,6 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
       final index = current == null ? null : Track.audios.indexOf(current.audio.audio);
       if (!mounted || index == null || index == -1) return;
 
-      // debugPrint('index=$index active=$activeTrackIndex track=$track variant=$activeVariant');
       if (index < Track.repo.length && index != activeTrackIndex) {
         tombstone = (index: activeTrackIndex, background: activeBackground);
         activeTrackIndex = index;
@@ -132,6 +131,7 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
             (backgroundSlideController.offset / MediaQuery.of(context).size.width).round() % Track.repo.length;
         if (index != player.current.value?.index && index != activeTrackIndex) {
           player.playlistPlayAtIndex(index);
+          resetAutoplay();
         }
       });
     });
@@ -354,10 +354,11 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
     );
   }
 
-  Future<bool> handleAutoplay({bool wantAutoplay = true}) async {
+  Future<bool> handleAutoplay({required bool wantAutoplay}) async {
     if (autoplayTimer != null && !wantAutoplay) {
       autoplayTimer!.cancel();
       setState(() {
+        autoplayDuration = null;
         autoplayTimer = null;
       });
       return false;
@@ -365,16 +366,26 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
     if (!wantAutoplay) return false;
     final delay = await showDurationPicker(
       context: context,
-      initialTime: const Duration(minutes: 10),
+      initialTime: autoplayDuration ?? const Duration(minutes: 10),
     );
     if (!mounted || delay == null) return false;
     setState(() {
-      autoplayTimer = Timer.periodic(delay, (_) {
-        if (!mounted || !isPlaying) return;
-        handleAdvance(forward: true);
-      });
+      autoplayDuration = delay;
+      autoplayTimer = Timer.periodic(delay, doAutoplay);
     });
     return true;
+  }
+
+  void resetAutoplay() {
+    if ((autoplayTimer, autoplayDuration) case (var timer?, var delay?)) {
+      timer.cancel();
+      autoplayTimer = Timer.periodic(delay, doAutoplay);
+    }
+  }
+
+  void doAutoplay(Timer _) {
+    if (!mounted || !player.isPlaying.value) return;
+    handleAdvance(forward: true);
   }
 
   void handleSleep() async {
@@ -486,6 +497,10 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
       _ when activeVariant != null => player.playlistPlayAtIndex((activeTrackIndex + value) % Track.repo.length),
       _ => forward ? await player.next() : await player.previous(),
     });
+    if (autoplayTimer case var timer?) {
+      timer.cancel();
+      resetAutoplay();
+    }
     drivePlayPauseAnimation(toPlay: true);
   }
 }
