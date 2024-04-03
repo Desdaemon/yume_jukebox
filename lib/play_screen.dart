@@ -264,6 +264,7 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
             if (track.entry case final entry?)
               Badge(label: Text(track.variants.isEmpty ? '$entry' : '$entry$activeVariantName')),
           ]),
+          if (activeEvent.isNotEmpty) const Gap(4),
           if (activeEvent.isNotEmpty)
             Wrap(spacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
               const Icon(Icons.location_pin),

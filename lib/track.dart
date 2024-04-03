@@ -1,5 +1,6 @@
 import 'package:assets_audio_player/assets_audio_player.dart';
 import 'package:path/path.dart' as p;
+import 'package:radix_tree/radix_tree.dart';
 
 // Copy manifest.dart.example to manifest.dart and put in your own files
 part 'manifest.dart';
@@ -54,8 +55,8 @@ class Track extends Variant {
     }
   }
 
-  static List<Track> get repo =>
-      _manifest.toList(growable: false)..sort((a, b) => (a.entry ?? -1).compareTo(b.entry ?? -1));
+  static List<Track> get repo => _manifest.toList(growable: false)
+    ..sort((a, b) => (a.entry ?? -1).compareTo(b.entry ?? -1));
   static List<Audio> audios = repo.map((track) {
     return Audio(
       track.path,
@@ -69,4 +70,20 @@ class Track extends Variant {
       ),
     );
   }).toList();
+
+  static RadixTree<Set<int>> audiosByEvent = _audiosByEvent;
+  static RadixTree<Set<int>> get _audiosByEvent {
+    final tree = RadixTree<Set<int>>();
+    for (final (idx, track) in repo.indexed) {
+      if (track.event.isNotEmpty) {
+        tree.putIfAbsent(track.event.toLowerCase(), Set.new)!.add(idx);
+      }
+      for (final variant in track.variants) {
+        if (variant.event.isNotEmpty) {
+          tree.putIfAbsent(variant.event.toLowerCase(), Set.new)!.add(idx);
+        }
+      }
+    }
+    return tree;
+  }
 }

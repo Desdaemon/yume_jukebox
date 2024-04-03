@@ -288,6 +288,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
+  radix_tree:
+    dependency: "direct main"
+    description:
+      name: radix_tree
+      sha256: "5a040953583f91c3fb7889c7e1cc4baea18c881cd1d8a8c7331aaa8041391812"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   rxdart:
     dependency: transitive
     description:
