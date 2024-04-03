@@ -188,40 +188,17 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
                   duration: newTrackTransitionDuration,
                   child: SizedBox.expand(
                     key: ValueKey(activeBackground),
-                    child: Image.asset(
-                      activeBackground,
-                      fit: BoxFit.cover,
-                      colorBlendMode: BlendMode.srcOver,
-                      color: Theme.of(context).brightness == Brightness.dark ? Colors.black.withAlpha(0x44) : null,
-                    ),
+                    child: Image.asset(activeBackground, fit: BoxFit.cover),
                   ),
                 );
               }
               if (wrappedIndex == tombstone.index) {
-                return Image.asset(
-                  tombstone.background,
-                  fit: BoxFit.cover,
-                  colorBlendMode: BlendMode.srcOver,
-                  color: Theme.of(context).brightness == Brightness.dark ? Colors.black.withAlpha(0x44) : null,
-                );
+                return Image.asset(tombstone.background, fit: BoxFit.cover);
               }
-              return Image.asset(
-                track.background,
-                fit: BoxFit.cover,
-                colorBlendMode: BlendMode.srcOver,
-                color: Theme.of(context).brightness == Brightness.dark ? Colors.black.withAlpha(0x44) : null,
-              );
+              return Image.asset(track.background, fit: BoxFit.cover);
             },
           ),
         ),
-        // SizedBox.expand(
-        //   child: ParallaxRain(
-        //     key: const ValueKey(true),
-        //     numberOfDrops: 100,
-        //     dropFallSpeed: 20,
-        //     dropColors: const [Colors.grey],
-        //   ),
-        // ),
         SizedBox(height: 64, child: AppBar(backgroundColor: Colors.transparent)),
         Positioned(
           bottom: 24,
