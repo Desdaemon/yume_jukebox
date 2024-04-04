@@ -7,6 +7,7 @@ import 'package:assets_audio_player/assets_audio_player.dart';
 import 'package:duration_picker/duration_picker.dart';
 import 'package:gap/gap.dart';
 import 'package:text_scroll/text_scroll.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'track.dart';
 import 'stateful_button.dart';
@@ -241,12 +242,15 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
             if (track.entry case final entry?)
               Badge(label: Text(track.variants.isEmpty ? '$entry' : '$entry$activeVariantName')),
           ]),
-          if (activeEvent.isNotEmpty) const Gap(4),
+          if (activeEvent.isNotEmpty) const Gap(2),
           if (activeEvent.isNotEmpty)
-            Wrap(spacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              const Icon(Icons.location_pin),
-              Text(activeEvent, style: Theme.of(context).textTheme.titleSmall),
-            ]),
+            GestureDetector(
+              onTap: handleTapEvent,
+              child: Wrap(spacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                const Icon(Icons.location_pin, size: 18),
+                Text(activeEvent, style: Theme.of(context).textTheme.titleSmall),
+              ]),
+            ),
           const Gap(8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -480,6 +484,17 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
       resetAutoplay();
     }
     drivePlayPauseAnimation(toPlay: true);
+  }
+
+  void handleTapEvent() async {
+    final searchPage = Uri.https('yume.wiki', '/index.php', {
+      'search': activeEvent.replaceAll(' ', '+'),
+      'title': 'Special%3ASearch',
+      'profile': 'advanced',
+      'fulltext': '1',
+      'ns3002': '1', // Yume 2kki
+    });
+    await launchUrl(searchPage);
   }
 }
 

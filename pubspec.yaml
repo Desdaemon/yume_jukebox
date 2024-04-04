@@ -43,6 +43,7 @@ dependencies:
   path: ^1.9.0
   parallax_rain: ^1.1.1
   radix_tree: ^2.0.1
+  url_launcher: ^6.2.5
   # yume_audio:
   #   path: packages/yume_audio
 

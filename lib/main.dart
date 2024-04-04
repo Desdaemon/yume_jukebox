@@ -66,10 +66,11 @@ class _TrackListingScreen extends State<StatefulWidget> with AtomHelpers {
           final track = Track.repo[index];
           return ListTile(
             key: ValueKey(track),
-            title: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            title: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
               Text(track.name),
-              const Gap(8),
               if (track.entry case var entry?) Badge(label: Text('$entry')),
+              if (track.background.endsWith('.webp') || track.background.endsWith('.gif'))
+                const Icon(Icons.movie, size: 16)
             ]),
             subtitle: track.event.isNotEmpty ? Text(track.event) : null,
             trailing: track.variants.isNotEmpty ? Text('■' * (track.variants.length + 1)) : null,
