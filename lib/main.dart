@@ -1,9 +1,15 @@
+import 'dart:math';
+
+import 'package:asset_cache/asset_cache.dart';
+import 'package:flim/flim.dart';
 import 'package:flutter/material.dart';
-import 'package:gap/gap.dart';
+import 'dart:ui' as ui;
 
 import 'track.dart';
 import 'with_atom.dart';
 import 'play_screen.dart';
+
+part 'game.dart';
 
 void main() {
   runApp(const MyApp());
@@ -27,6 +33,7 @@ class MyApp extends StatelessWidget {
       ),
       debugShowCheckedModeBanner: false,
       home: const TrackListingScreen(),
+      // home: const GameScreen(),
     );
   }
 }
@@ -53,7 +60,12 @@ class _TrackListingScreen extends State<StatefulWidget> with AtomHelpers {
           child: searchBar,
         ),
         actions: [
-          IconButton(icon: searching ? const Icon(Icons.close) : const Icon(Icons.search), onPressed: handleSearch)
+          IconButton(icon: searching ? const Icon(Icons.close) : const Icon(Icons.search), onPressed: handleSearch),
+          IconButton(
+              icon: const Icon(Icons.photo),
+              onPressed: () {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GameScreen()));
+              }),
         ],
       ),
       body: ListView.builder(

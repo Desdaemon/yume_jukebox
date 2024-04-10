@@ -8,6 +8,8 @@ import 'package:duration_picker/duration_picker.dart';
 import 'package:gap/gap.dart';
 import 'package:text_scroll/text_scroll.dart';
 import 'package:url_launcher/url_launcher.dart';
+// import 'package:video_player/video_player.dart';
+import 'package:native_video_player/native_video_player.dart';
 
 import 'track.dart';
 import 'stateful_button.dart';
@@ -33,6 +35,7 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
   String get activeEvent => _activeVariant?.event ?? _track.event;
 
   late Track _track = Track.repo[widget.initialIndex];
+  // VideoPlayerController? playerController;
   Track get track => _track;
   set track(Track track) {
     final backgroundChanged = track.background != activeBackground;
@@ -162,6 +165,7 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
     for (final subscription in subscriptions) {
       subscription.cancel();
     }
+    // playerController?.dispose();
     sleepTimer?.cancel();
     autoplayTimer?.cancel();
     player.dispose();
@@ -189,7 +193,21 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
                   duration: newTrackTransitionDuration,
                   child: SizedBox.expand(
                     key: ValueKey(activeBackground),
-                    child: Image.asset(activeBackground, fit: BoxFit.cover),
+                    child: activeBackground.endsWith('.webm')
+                        // ? VideoPlayer(videoController)
+                        ? AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: NativeVideoPlayerView(
+                              onViewReady: (controller) async {
+                                final src = await VideoSource.init(path: activeBackground, type: VideoSourceType.asset);
+                                await controller.loadVideoSource(src);
+                                controller.onPlaybackEnded.addListener(controller.play);
+                                await controller.setVolume(0);
+                                await controller.play();
+                                await player.play();
+                              },
+                            ))
+                        : Image.asset(activeBackground, fit: BoxFit.cover),
                   ),
                 );
               }
@@ -496,6 +514,15 @@ class _PlayScreenState extends State<PlayScreen> with SingleTickerProviderStateM
     });
     await launchUrl(searchPage);
   }
+
+  // VideoPlayerController get videoController {
+  //   final player = VideoPlayerController.asset(activeBackground);
+  //   playerController?.dispose();
+  //   return playerController = player
+  //     ..initialize()
+  //     ..setLooping(true)
+  //     ..play();
+  // }
 }
 
 enum AutoplayMode implements ButtonState<AutoplayMode> {
